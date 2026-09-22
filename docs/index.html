@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ranking Signal Analysis | FlyRank Search Intelligence Capstone</title>
+<style>
+:root{--ink:#17202a;--muted:#5f6b76;--line:#dfe5ea;--bg:#f7f9fb;--card:#fff;--accent:#2457d6;--accent2:#163b94;--good:#247a52;--warn:#9a6814}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.65}
+main{max-width:1100px;margin:auto;padding:48px 24px 80px}
+header{background:linear-gradient(135deg,#17202a,#29456e);color:white;border-radius:22px;padding:48px;margin-bottom:28px}
+.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;opacity:.78}
+h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.08;margin:12px 0 18px}
+h2{font-size:1.7rem;margin-top:0}
+h3{font-size:1.15rem;margin-bottom:8px}
+section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:30px;margin:20px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fbfcfe}
+.stat strong{display:block;font-size:1.45rem;color:var(--accent)}
+table{width:100%;border-collapse:collapse;margin:18px 0}
+th,td{text-align:left;padding:11px;border-bottom:1px solid var(--line)}
+th{background:#f1f4f8}
+.note{border-left:4px solid var(--accent);padding:12px 16px;background:#f3f6ff;margin:18px 0}
+.warning{border-left-color:#c38a21;background:#fff9ed}
+code{background:#eef1f5;padding:2px 5px;border-radius:4px}
+.bar-row{display:grid;grid-template-columns:90px 1fr 90px;gap:10px;align-items:center;margin:10px 0}
+.bar{height:18px;background:#d9e3fa;border-radius:999px;overflow:hidden}
+.fill{height:100%;background:var(--accent)}
+.small{font-size:.9rem;color:var(--muted)}
+footer{text-align:center;color:var(--muted);padding-top:30px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">FlyRank ML Internship Capstone · Ranking Signal Analysis</div>
+<h1>From Search Signals to Human-Reviewed Content Priorities</h1>
+<p>A time-aware evaluation of observable search and engagement signals for content-level CTR estimation and transparent review prioritization.</p>
+</header>
+
+<section id="abstract">
+<h2>1. Abstract</h2>
+<p>This study asks whether observable search and engagement signals can support reliable ranking of content-level CTR and help prioritize content for human review. Using FlyRank search intelligence data from January–March 2026, the analysis aggregates observations to the content-client level, trains an XGBoost regression model on January–February data, and evaluates it on March observations using a time-aware design. On the 118,091 March observations where a historical CTR baseline was available, the model achieved an MAE of 0.003543, RMSE of 0.008587, R² of 0.068647, and NDCG of 0.789890, while the historical CTR baseline achieved an MAE of 0.003413, RMSE of 0.016760, R² of -2.548167, and NDCG of 0.795028. The model therefore reduced large prediction errors and produced positive explanatory performance, but it did not improve ranking quality over the simple historical baseline, which also had higher mean per-client NDCG across 39 clients. The final output translates observed search signals into a transparent rule-based review queue, intended to support human investigation rather than automate content changes or make causal claims.</p>
+</section>
+
+<section id="intro">
+<h2>2. Introduction / Problem Statement</h2>
+<p>Search teams often have more content opportunities than they can manually investigate. A practical decision-support system therefore needs to identify which content observations deserve attention first while remaining transparent about what the available data can and cannot establish.</p>
+<p>This capstone investigates two related questions:</p>
+<ol><li>Can observable search and engagement signals help estimate observed content-level CTR?</li><li>Can those signals be translated into a transparent ranking of content observations for human review?</li></ol>
+<p><strong>Decision supported:</strong> Which content observations provide enough measurable signal to justify investigation first?</p>
+</section>
+
+<section id="data">
+<h2>3. Data</h2>
+<p>The analysis uses the FlyRank ML Internship warehouse, with one daily warehouse observation representing a content item, client, and report date. The published analysis uses aggregated and derived metrics rather than exposing client names, domains, private queries, credentials, or raw exports.</p>
+<div class="grid">
+<div class="stat"><strong>7,890,817</strong>January daily rows</div>
+<div class="stat"><strong>7,355,108</strong>February daily rows</div>
+<div class="stat"><strong>9,841,378</strong>March daily rows</div>
+<div class="stat"><strong>213,324</strong>training observations</div>
+<div class="stat"><strong>143,206</strong>March test observations</div>
+<div class="stat"><strong>118,091</strong>common baseline observations</div>
+</div>
+<h3>Data preparation</h3>
+<ul>
+<li>Daily observations were aggregated to the content-client-month level.</li>
+<li>CTR was calculated as clicks divided by impressions.</li>
+<li>Engagement rate was calculated from engaged sessions divided by sessions.</li>
+<li>Average engagement seconds was calculated from total engagement seconds divided by sessions.</li>
+<li>Observations with fewer than 10 impressions were excluded from the modeling and review queue.</li>
+<li>Identifiers were used for grouping and evaluation, not as predictive model features.</li>
+<li>Future trend fields were not used as predictors.</li>
+</ul>
+</section>
+
+<section id="method">
+<h2>4. Methodology</h2>
+<h3>4.1 Features</h3>
+<p>The model uses <code>gsc_impressions</code>, <code>log_impressions</code>, <code>gsc_avg_position</code>, <code>engagement_rate</code>, <code>avg_engagement_sec</code>, and a position bucket. Missing engagement-derived values were retained as missing rather than blindly converted to zero.</p>
+<h3>4.2 Model</h3>
+<p>An XGBoost regression model was trained with 200 estimators, maximum depth 6, learning rate 0.05, subsampling 0.8, column subsampling 0.8, and random state 42.</p>
+<h3>4.3 Validation design</h3>
+<p>January and February were used for training and March was held out as a later evaluation period. This prevents March observations from entering model training, but it is important that March predictors are observed March signals. Therefore this is a <strong>time-aware later-period evaluation</strong>, not a pure pre-March forecasting experiment.</p>
+<h3>4.4 Historical baseline</h3>
+<p>The reference baseline uses historical CTR from January–February for content-client pairs that also appear in March. It covered 118,091 of 143,206 March observations (82.5%). Direct model-versus-baseline comparisons use this same common population.</p>
+<h3>4.5 Metrics and leakage checks</h3>
+<p>Performance was evaluated using MAE, RMSE, R², and NDCG. Clicks were not supplied as a feature, identifiers were excluded from prediction, and future trend variables were excluded. Impressions remain a target-proximal exposure variable because they appear in both the CTR denominator and the feature set; this is disclosed rather than treated as direct target leakage.</p>
+</section>
+
+<section id="results">
+<h2>5. Results</h2>
+<h3>5.1 Model vs. historical CTR baseline</h3>
+<table>
+<thead><tr><th>Metric</th><th>XGBoost</th><th>Historical CTR baseline</th></tr></thead>
+<tbody>
+<tr><td>MAE</td><td>0.003543</td><td>0.003413</td></tr>
+<tr><td>RMSE</td><td>0.008587</td><td>0.016760</td></tr>
+<tr><td>R²</td><td>0.068647</td><td>-2.548167</td></tr>
+<tr><td>NDCG</td><td>0.789890</td><td>0.795028</td></tr>
+</tbody>
+</table>
+
+<div class="note"><strong>Interpretation:</strong> The evaluation does not show a uniform advantage for one method. The model substantially reduced RMSE and produced positive R², while the historical baseline had slightly lower MAE and higher overall NDCG. The tested ML model therefore did not demonstrate superior ranking quality to the simple historical reference.</div>
+
+<h3>5.2 Client-level ranking stability</h3>
+<div class="grid">
+<div class="stat"><strong>39</strong>clients evaluated</div>
+<div class="stat"><strong>0.582826</strong>mean model NDCG</div>
+<div class="stat"><strong>0.629262</strong>mean baseline NDCG</div>
+<div class="stat"><strong>14 / 39</strong>clients where model NDCG was higher</div>
+</div>
+<p>Across client-level ranking contexts, the historical baseline had equal or higher NDCG for 25 of 39 clients. This reinforces that ranking performance depends on the evaluation context and that aggregate prediction-error improvements do not automatically translate into better ranking quality.</p>
+
+<h3>5.3 Feature importance</h3>
+<div class="bar-row"><span>Position</span><div class="bar"><div class="fill" style="width:100%"></div></div><span>0.2116</span></div>
+<div class="bar-row"><span>Pos. bucket</span><div class="bar"><div class="fill" style="width:84%"></div></div><span>0.1774</span></div>
+<div class="bar-row"><span>Log impressions</span><div class="bar"><div class="fill" style="width:77%"></div></div><span>0.1622</span></div>
+<div class="bar-row"><span>Impressions</span><div class="bar"><div class="fill" style="width:75%"></div></div><span>0.1587</span></div>
+<div class="bar-row"><span>Avg. engagement</span><div class="bar"><div class="fill" style="width:69%"></div></div><span>0.1465</span></div>
+<div class="bar-row"><span>Engagement rate</span><div class="bar"><div class="fill" style="width:68%"></div></div><span>0.1436</span></div>
+<p class="small">Feature importance describes how the fitted model used the available variables; it does not establish that a feature causes CTR changes. Raw and transformed versions of related variables should also be interpreted as feature groups.</p>
+</section>
+
+<section id="limitations">
+<h2>6. Limitations &amp; Honest Framing</h2>
+<ul>
+<li>The evaluation is time-aware but not a pure forecast because March features are contemporaneous observed signals.</li>
+<li>Impressions are both an exposure feature and the denominator of CTR, making them target-proximal.</li>
+<li>The historical baseline is available only for previously observed content-client pairs and covers 82.5% of the March test population.</li>
+<li>The data does not include all potentially relevant factors, such as page semantics, search queries and intent, title/snippet details, technical SEO, backlinks, or complete seasonal context.</li>
+<li>Feature importance is not causal evidence.</li>
+<li>The analysis is observational and does not establish that changing a content attribute will improve future performance.</li>
+</ul>
+<div class="note warning"><strong>Supported conclusion:</strong> Observable search and engagement signals contain useful information for estimating and ranking observed CTR, but the tested XGBoost model did not demonstrate superior ranking performance to a simple historical-CTR baseline in the March 2026 evaluation.</div>
+<p>This work does not establish Google's ranking algorithm, prove causal refresh effects, or guarantee individual content outcomes. It should not be used to automatically publish, rewrite, delete, redirect, or canonicalize content.</p>
+</section>
+
+<section id="recommendations">
+<h2>7. Ranked Recommendations</h2>
+<h3>7.1 From signals to a human-review queue</h3>
+<p>The final queue is a transparent rule-based triage layer built from March 2026 observed signals. It is not a prediction of which changes will improve performance.</p>
+<h3>7.2 Priority logic</h3>
+<ul>
+<li><strong>+2:</strong> CTR at or below the March 25th percentile.</li>
+<li><strong>+2:</strong> average position above 10 and at or below the March 75th percentile.</li>
+<li><strong>+1:</strong> impressions at or above the March median.</li>
+</ul>
+<p>Because the March CTR 25th percentile was 0, the low-CTR condition primarily identifies observations with zero clicks despite having at least 10 impressions.</p>
+
+<h3>7.3 Priority distribution</h3>
+<div class="bar-row"><span>Score 0</span><div class="bar"><div class="fill" style="width:19%"></div></div><span>9,318</span></div>
+<div class="bar-row"><span>Score 1</span><div class="bar"><div class="fill" style="width:92%"></div></div><span>44,219</span></div>
+<div class="bar-row"><span>Score 2</span><div class="bar"><div class="fill" style="width:100%"></div></div><span>49,060</span></div>
+<div class="bar-row"><span>Score 3</span><div class="bar"><div class="fill" style="width:47%"></div></div><span>22,864</span></div>
+<div class="bar-row"><span>Score 4</span><div class="bar"><div class="fill" style="width:27%"></div></div><span>13,224</span></div>
+<div class="bar-row"><span>Score 5</span><div class="bar"><div class="fill" style="width:9%"></div></div><span>4,521</span></div>
+
+<h3>7.4 Human review playbook</h3>
+<ol>
+<li>Inspect the actual page and its current content.</li>
+<li>Review the queries and search intent available to the authorized reviewer.</li>
+<li>Check title and SERP presentation.</li>
+<li>Review impressions, position, and CTR together rather than in isolation.</li>
+<li>Check recent content changes and possible seasonality.</li>
+<li>Verify tracking and data-quality issues.</li>
+<li>Check duplicates, canonicals, and related technical conditions before proposing changes.</li>
+</ol>
+<p><strong>No-go list:</strong> Do not automatically publish, rewrite, delete, redirect, or canonicalize content from this score alone. Do not treat priority as proof of causality or as a guaranteed future outcome.</p>
+</section>
+
+<section id="repro">
+<h2>8. Reproducibility</h2>
+<p>The analysis is implemented in the capstone notebook:</p>
+<p><code>work/capstone/capstone_ranking_signal_analysis.ipynb</code></p>
+<p>Key exported outputs include:</p>
+<ul>
+<li><code>work/capstone/outputs/model_vs_baseline_metrics.csv</code></li>
+<li><code>work/capstone/outputs/client_ndcg_comparison.csv</code></li>
+<li><code>work/capstone/outputs/feature_importance.csv</code></li>
+<li><code>work/outputs/ranked_action_queue.csv</code></li>
+<li><code>work/outputs/ranked_action_queue_top100.csv</code></li>
+<li><code>work/outputs/priority_score_summary.csv</code></li>
+</ul>
+<p>The workflow loads January, February, and March warehouse data; selects public-safe fields; aggregates to monthly content-client observations; builds features; trains and evaluates the model; constructs the historical baseline; evaluates overall and client-level NDCG; audits leakage; creates the rule-based queue; and exports reproducibility files.</p>
+</section>
+
+<section id="ack">
+<h2>9. Acknowledgments &amp; Data Credit</h2>
+<p>This research was completed as part of the FlyRank ML Internship capstone and uses the FlyRank search intelligence dataset for analytical research and learning purposes.</p>
+<p><strong><a href="https://flyrank.ai" rel="noopener">Built on the FlyRank ML Internship dataset</a></strong></p>
+<p>The analysis follows the public-safety requirements of the capstone: no client names, domains, private queries, credentials, raw exports, or claims about Google's ranking algorithm are included in this published research.</p>
+</section>
+
+<footer>
+<p>FlyRank Search Intelligence Capstone · Ranking Signal Analysis · January–March 2026</p>
+</footer>
+</main>
+</body>
+</html>
